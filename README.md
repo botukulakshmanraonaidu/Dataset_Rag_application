@@ -1,305 +1,129 @@
 # 🧠 Enterprise Document QA — RAG Application
 
-A full-stack **Retrieval-Augmented Generation (RAG)** system that lets you upload enterprise documents (PDF, DOCX, TXT) and ask natural-language questions against them. Powered by a **Hybrid Retrieval** engine that combines **FAISS semantic search** with **BM25 keyword search** for maximum accuracy.
-
----
-
-## ✨ Features
-
-- 📄 **Multi-format document ingestion** — PDF, DOCX, TXT
-- 🔍 **Hybrid Retrieval** — FAISS (semantic) + BM25 (keyword) with configurable weights
-- 💬 **Natural-language Q&A** — powered by an LLM via LangChain
-- 📊 **Source citations** — every answer includes document sources
-- ⏱️ **Latency tracking** — response time reported per query
-- 🗂️ **Knowledge base management** — upload, list, and delete documents via UI
-- 🌐 **React + Vite frontend** — premium glassmorphic enterprise UI
-- ⚡ **FastAPI backend** — async, production-ready REST API
+Welcome to the **Enterprise Document QA** system! This is a full-stack **Retrieval-Augmented Generation (RAG)** application. 
+It allows you to upload enterprise documents (PDFs, Word docs, Text files) and ask natural-language questions about their content. The system uses advanced AI (Hybrid Retrieval combining both keyword and semantic search) to find the right information and generate accurate answers with citations.
 
 ---
 
 ## 🗂️ Project Structure
 
-```
+The project is divided into two main parts: the **Backend** (Python/FastAPI) and the **Frontend** (React/Vite).
+
+```text
 Enterprise_document/
 │
-├── backend/                        # Python FastAPI backend
-│   ├── src/                        # Core application modules
-│   │   ├── __init__.py
-│   │   ├── app.py                  # FastAPI app — all API routes
-│   │   ├── ingestion.py            # Document loading & chunking
-│   │   ├── vector_store.py         # FAISS vector store creation & loading
-│   │   ├── retrievers.py           # Hybrid Retriever (BM25 + FAISS)
-│   │   ├── qa_chain.py             # LangChain QA chain setup
-│   │   └── evaluation.py           # RAG evaluation utilities (RAGAS)
-│   ├── data/                       # Uploaded documents (git-ignored)
-│   ├── faiss_index/                # Persisted FAISS index (git-ignored)
-│   ├── bm25_chunks.json            # Persisted BM25 chunks (git-ignored)
-│   ├── requirements.txt            # Python dependencies
-│   └── .env                        # Environment variables — secrets (git-ignored)
+├── backend/                        # ⚙️ Python Backend Server
+│   ├── src/                        # Source code for the backend logic
+│   │   ├── app.py                  # Main API server (FastAPI endpoints: /upload, /ask, etc.)
+│   │   ├── ingestion.py            # Code to read and chunk uploaded documents
+│   │   ├── vector_store.py         # Code to manage the FAISS vector database
+│   │   ├── retrievers.py           # Logic for Hybrid Search (BM25 + FAISS)
+│   │   ├── qa_chain.py             # LangChain logic to connect the LLM and retriever
+│   │   └── evaluation.py           # Optional tools for evaluating answer quality
+│   │
+│   ├── data/                       # 📁 Folder where your uploaded documents are saved (Git ignored)
+│   ├── faiss_index/                # 🧠 Folder where the vector database is stored (Git ignored)
+│   ├── bm25_chunks.json            # 🧠 File storing keyword search indices (Git ignored)
+│   ├── requirements.txt            # List of Python dependencies needed
+│   └── .env                        # 🔑 Environment variables and API keys (Git ignored)
 │
-├── frontend/                       # React + Vite frontend
-│   ├── src/
-│   │   ├── App.jsx                 # Main application component
-│   │   ├── App.css                 # Component styles
-│   │   └── index.css               # Global design system & tokens
-│   ├── public/                     # Static assets
-│   ├── index.html                  # HTML entry point
-│   ├── vite.config.js              # Vite configuration
-│   ├── package.json                # Node.js dependencies & scripts
-│   └── eslint.config.js            # ESLint configuration
+├── frontend/                       # 🎨 React + Vite User Interface
+│   ├── src/                        # Source code for the frontend UI
+│   │   ├── App.jsx                 # Main React component (the web page you see)
+│   │   ├── App.css                 # Specific styles for components
+│   │   └── index.css               # Global styles and design themes
+│   │
+│   ├── public/                     # Static files (like favicon, images)
+│   ├── index.html                  # Main HTML file that loads the React app
+│   ├── vite.config.js              # Configuration for the Vite build tool
+│   └── package.json                # List of Node.js dependencies (React, Vite, etc.)
 │
-├── .gitignore                      # Git ignore rules
-└── README.md                       # This file
+├── .gitignore                      # Tells Git which files to ignore (like passwords/large folders)
+└── README.md                       # The instruction manual you are reading right now!
 ```
 
 ---
 
-## ⚙️ How It Works
+## 🚀 Getting Started Guide
 
-```
-User uploads document
-        │
-        ▼
-[ /upload ] ──► Saves file to backend/data/
-        │
-        ▼
-[ /ingest ] ──► Loads & chunks documents (1000 chars, 200 overlap)
-        │        ├── Creates FAISS vector index  (semantic search)
-        │        └── Serializes chunks to JSON   (BM25 keyword search)
-        │
-        ▼
-[ /ask   ] ──► User types a question
-                │
-                ▼
-          Hybrid Retriever
-          ┌─────────────────────────────────────┐
-          │  BM25 Score × α + FAISS Score × β  │
-          │  (default α = 0.5, β = 0.5)         │
-          └─────────────────────────────────────┘
-                │
-                ▼
-          Top-k chunks sent to LLM
-                │
-                ▼
-          Answer + Sources returned to UI
-```
-
----
-
-## 🚀 Getting Started
+Follow these steps to run the project on your local machine. You will need to start **both** the backend and the frontend.
 
 ### Prerequisites
+Make sure you have installed:
+- **Python** (version 3.10 or higher)
+- **Node.js** (version 18 or higher)
 
-| Tool | Version |
-|---|---|
-| Python | ≥ 3.10 |
-| Node.js | ≥ 18.x |
-| npm | ≥ 9.x |
+### 1. Backend Setup (Terminal 1)
 
----
-
-### 1. Clone the Repository
+Open a terminal and navigate to the `backend` folder to set up the server.
 
 ```bash
-git clone https://github.com/botukulakshmanraonaidu/Rag_Application.git
-cd Rag_Application
-```
-
----
-
-### 2. Backend Setup
-
-```bash
-# Navigate to backend
+# Move into the backend folder
 cd backend
 
-# Create & activate virtual environment
+# Create a virtual environment (this keeps dependencies isolated)
 python -m venv venv
 
-# Windows
+# Activate the virtual environment
+# On Windows:
 venv\Scripts\activate
+# On Mac/Linux:
+# source venv/bin/activate
 
-# macOS / Linux
-source venv/bin/activate
-
-# Install dependencies
+# Install all the required Python libraries
 pip install -r requirements.txt
 ```
 
-#### Configure Environment Variables
-
-Create a `.env` file inside the `backend/` folder:
-
+**Set up your keys:**
+Create a file named `.env` inside the `backend` folder and add your API keys:
 ```env
-# backend/.env
-
-# Your Hugging Face API token (for embeddings)
-HUGGINGFACEHUB_API_TOKEN=hf_your_token_here
-
-# Optional: LLM provider API key (if using OpenAI)
-OPENAI_API_KEY=sk-your_key_here
-
-# Optional: Hybrid retriever weights (must sum to 1.0)
-HYBRID_ALPHA=0.5   # Weight for BM25 keyword search
-HYBRID_BETA=0.5    # Weight for FAISS semantic search
+HUGGINGFACEHUB_API_TOKEN=your_huggingface_token_here
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-> ⚠️ **Never commit `.env` to git.** It is already listed in `.gitignore`.
-
-#### Start the Backend Server
-
+**Start the Backend Server:**
 ```bash
-# Run from inside the backend/ directory
+# Run this command while still inside the backend/ folder
 uvicorn src.app:app --reload --host 0.0.0.0 --port 8000
 ```
+*The backend API is now running at **http://localhost:8000***
 
-The API will be available at: **http://localhost:8000**  
-Interactive API docs: **http://localhost:8000/docs**
+### 2. Frontend Setup (Terminal 2)
 
----
-
-### 3. Frontend Setup
-
-Open a **new terminal**:
+Open a **new** terminal window and navigate to the `frontend` folder.
 
 ```bash
-# Navigate to frontend
+# Move into the frontend folder
 cd frontend
 
-# Install dependencies
+# Install all the required Node.js libraries
 npm install
 
-# Start the dev server
+# Start the frontend user interface
 npm run dev
 ```
+*The frontend is now running at **http://localhost:5173***
 
-The frontend will be available at: **http://localhost:5173**
-
----
-
-## 📡 API Reference
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/` | API info and links |
-| `GET` | `/health` | System health & index status |
-| `POST` | `/upload` | Upload a document (PDF/DOCX/TXT) |
-| `POST` | `/ingest` | Index all uploaded documents |
-| `POST` | `/ask` | Ask a question against the knowledge base |
-| `GET` | `/documents` | List all uploaded documents |
-| `DELETE` | `/documents/{filename}` | Delete a specific document |
-| `DELETE` | `/documents` | Clear all documents and the vector index |
-
-### Example: Ask a Question
-
-```bash
-curl -X POST http://localhost:8000/ask \
-  -H "Content-Type: application/json" \
-  -d '{"text": "What are the key findings in the report?"}'
-```
-
-**Response:**
-```json
-{
-  "answer": "The key findings are...",
-  "sources": ["report_q4.pdf"],
-  "latency_ms": 1234.56,
-  "confidence": 0.99
-}
-```
+Open your browser and go to `http://localhost:5173` to use the application!
 
 ---
 
-## 🔬 Hybrid Retrieval — Deep Dive
+## ⚙️ How the System Works
 
-The system uses a **custom `HybridRetriever`** that combines two signals:
-
-| Component | Algorithm | Strength |
-|---|---|---|
-| **BM25** | Keyword frequency scoring (Okapi BM25) | Exact term matches, acronyms |
-| **FAISS** | Dense vector similarity (cosine/L2) | Semantic meaning, paraphrasing |
-
-**Scoring formula:**
-```
-final_score = (α × normalized_BM25_score) + (β × normalized_FAISS_score)
-```
-
-- Both scores are normalized to `[0, 1]` before combining.
-- Documents scoring below `threshold = 0.15` are filtered out.
-- Top `k = 4` unique documents are returned to the LLM.
-- Weights `α` and `β` are configurable via `.env`.
+1. **Upload via UI**: You upload a document (like a PDF) using the web interface.
+2. **Backend Storage**: The backend saves this file into the `backend/data/` folder.
+3. **Ingestion**: When you ask the system to ingest, it reads the document, breaks it into smaller "chunks", and creates two types of indexes:
+   - A **FAISS Vector Index** (for understanding the *meaning* of words).
+   - A **BM25 Keyword Index** (for finding exact word matches).
+4. **Asking Questions**: You type a question in the UI.
+5. **Hybrid Retrieval**: The backend searches both indexes (FAISS and BM25) to find the most relevant chunks of text from your documents.
+6. **LLM Answer**: The backend sends your question and those relevant chunks to an AI model (LLM), which reads them and writes a clear answer, alongside verifying which documents it used.
 
 ---
 
-## 🛠️ Tech Stack
+## 📝 Important Notes on Git and Committing
 
-### Backend
-| Library | Purpose |
-|---|---|
-| **FastAPI** | REST API framework |
-| **LangChain** | LLM orchestration & chains |
-| **FAISS** | Vector similarity search |
-| **BM25 (rank_bm25)** | Keyword retrieval |
-| **HuggingFace Embeddings** | Text → vector embeddings |
-| **PyPDF / Docx2txt** | Document parsing |
-| **RAGAS** | RAG evaluation metrics |
-| **Uvicorn** | ASGI server |
-
-### Frontend
-| Library | Purpose |
-|---|---|
-| **React 19** | UI framework |
-| **Vite 8** | Build tool & dev server |
-| **Lucide React** | Icons |
-| **Vanilla CSS** | Custom glassmorphic design system |
-
----
-
-## 📁 Ignored Files (Not in Git)
-
-The following are **never committed** to the repository:
-
-| Path | Reason |
-|---|---|
-| `backend/.env` | Contains API secrets |
-| `backend/data/` | User-uploaded documents (private data) |
-| `backend/faiss_index/` | Auto-generated, rebuilt on ingest |
-| `backend/bm25_chunks.json` | Auto-generated, rebuilt on ingest |
-| `venv/` | Python virtual environment |
-| `frontend/node_modules/` | Node.js dependencies |
-| `frontend/dist/` | Production build output |
-
-To restore after cloning:
-```bash
-# Backend
-pip install -r backend/requirements.txt
-
-# Frontend
-cd frontend && npm install
-```
-
----
-
-## 🧪 Running After Clone (Quick Reference)
-
-```bash
-# Terminal 1 — Backend
-cd backend
-python -m venv venv && venv\Scripts\activate   # Windows
-pip install -r requirements.txt
-# Create .env file with your API keys
-uvicorn src.app:app --reload --port 8000
-
-# Terminal 2 — Frontend
-cd frontend
-npm install
-npm run dev
-```
-
-Then open **http://localhost:5173** in your browser.
-
----
-
-## 📄 License
-
-This project is for educational and enterprise use. See individual library licenses for their respective terms.
+To keep the repository clean and secure, certain files are **ignored** by Git (defined in `.gitignore`):
+- **Dependencies**: `venv/` and `node_modules/` are huge and can be re-downloaded anytime using `pip install` or `npm install`.
+- **Secrets**: `backend/.env` contains your passwords and API keys. NEVER commit this to GitHub.
+- **Your Data**: `backend/data/`, `faiss_index/`, and `bm25_chunks.json` are unique to the files you upload locally, so they are not tracked.
