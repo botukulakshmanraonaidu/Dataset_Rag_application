@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
 langchain
 langchain-classic
 langchain-text-splitters
@@ -6,16 +8,14 @@ langchain-openai
 langchain-huggingface
 sentence-transformers
 faiss-cpu
-chromadb
 pypdf
-unstructured
 fastapi
 uvicorn
 python-multipart
 python-dotenv
-ragas
 flashrank
 docx2txt
 rank_bm25
 ddgs
 pandas
+
