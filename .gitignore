@@ -56,10 +56,10 @@ config/secrets.*
 # ─────────────────────────────────────────
 
 # FAISS index (auto-generated, can be rebuilt)
-backend/faiss_index/
+# backend/faiss_index/
 
 # BM25 serialized chunks (auto-generated)
-backend/bm25_chunks.json
+# backend/bm25_chunks.json
 
 # Uploaded / ingested source documents
 backend/data/
@@ -69,6 +69,11 @@ backend/data/
 *.pkl
 *.faiss
 *.index
+
+# Keep pre-built FAISS index files
+!backend/faiss_index/index.faiss
+!backend/faiss_index/index.pkl
+
 
 # ─────────────────────────────────────────
 #  Node.js / Frontend (React + Vite)
