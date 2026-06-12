@@ -25,7 +25,9 @@ import './App.css';
 import networkImage from './assets/network_topology.png';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 
-  (import.meta.env.DEV ? 'http://127.0.0.1:8000' : 'https://dataset-rag-application.onrender.com');
+  ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
+    ? 'http://127.0.0.1:8000' 
+    : 'https://dataset-rag-application.onrender.com');
 
 function App() {
   const [documents, setDocuments] = useState([]);
