@@ -149,48 +149,62 @@ We believe rest is essential for high performance. Our vacation policy is as fol
 - Code of Conduct: We maintain a professional, respectful, and harassment-free work environment for all employees.
 """
 
+async def initialize_system_background():
+    """Initializes the vector store, retriever, and QA chain in the background to avoid blocking port binding."""
+    global vector_store
+    import asyncio
+    try:
+        logger.info("Starting background system initialization...")
+        data_dir = Path("./data")
+        data_dir.mkdir(exist_ok=True)
+        
+        # Check for supported files recursively
+        files = []
+        for ext in SUPPORTED_EXTENSIONS:
+            files.extend(list(data_dir.rglob(f"*{ext}")))
+        
+        # If no faiss_index exists, automatically ingest on startup
+        if not os.path.exists("./faiss_index"):
+            # If no supported files exist recursively, seed default dataset
+            if not files:
+                logger.info("No documents or index found. Seeding default ACME company policies dataset...")
+                try:
+                    default_file = data_dir / "company_policies.txt"
+                    with open(default_file, "w", encoding="utf-8") as f:
+                        f.write(DEFAULT_POLICY_TEXT)
+                    # Refresh files list
+                    files = []
+                    for ext in SUPPORTED_EXTENSIONS:
+                        files.extend(list(data_dir.rglob(f"*{ext}")))
+                except Exception as e:
+                    logger.error(f"Failed to auto-seed default dataset: {str(e)}")
+            
+            # Ingest whatever files we have recursively
+            if files:
+                logger.info(f"Automatically ingesting dataset recursively in background ({len(files)} files found)...")
+                try:
+                    loop = asyncio.get_event_loop()
+                    chunks = await loop.run_in_executor(None, load_and_chunk_documents, "./data")
+                    if chunks:
+                        vector_store = await loop.run_in_executor(None, create_vector_store, chunks)
+                        builder = HybridRetrieverBuilder(vector_store)
+                        await loop.run_in_executor(None, builder.save_chunks, chunks)
+                        logger.info("Dataset ingested successfully in background.")
+                except Exception as e:
+                    logger.error(f"Failed to auto-ingest dataset in background: {str(e)}")
+        
+        # Reinitialize system (which loads index and models) in thread pool
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, reinitialize_system)
+        logger.info("Background system initialization complete.")
+    except Exception as e:
+        logger.critical(f"Unhandled exception in background initialization: {str(e)}")
+
 @app.on_event("startup")
 async def startup_event():
-    global vector_store
-    
-    # Ensure data directory exists
-    data_dir = Path("./data")
-    data_dir.mkdir(exist_ok=True)
-    
-    # Check for supported files recursively
-    files = []
-    for ext in SUPPORTED_EXTENSIONS:
-        files.extend(list(data_dir.rglob(f"*{ext}")))
-    
-    # If no faiss_index exists, automatically ingest on startup
-    if not os.path.exists("./faiss_index"):
-        # If no supported files exist recursively, seed default dataset
-        if not files:
-            logger.info("No documents or index found. Seeding default ACME company policies dataset...")
-            try:
-                default_file = data_dir / "company_policies.txt"
-                with open(default_file, "w", encoding="utf-8") as f:
-                    f.write(DEFAULT_POLICY_TEXT)
-                # Refresh files list
-                for ext in SUPPORTED_EXTENSIONS:
-                    files.extend(list(data_dir.rglob(f"*{ext}")))
-            except Exception as e:
-                logger.error(f"Failed to auto-seed default dataset: {str(e)}")
-        
-        # Ingest whatever files we have recursively
-        if files:
-            logger.info(f"Automatically ingesting dataset recursively on startup ({len(files)} files found)...")
-            try:
-                chunks = load_and_chunk_documents("./data")
-                if chunks:
-                    vector_store = create_vector_store(chunks)
-                    builder = HybridRetrieverBuilder(vector_store)
-                    builder.save_chunks(chunks)
-                    logger.info("Dataset ingested successfully on startup.")
-            except Exception as e:
-                logger.error(f"Failed to auto-ingest dataset: {str(e)}")
-            
-    reinitialize_system()
+    import asyncio
+    # Start background initialization task to prevent blocking the port binding
+    asyncio.create_task(initialize_system_background())
 
 @app.get("/")
 async def root():
@@ -232,7 +246,10 @@ class Response(BaseModel):
 async def ask_question(query: Query):
     if not qa_chain:
         logger.warning("Query received but QA chain not initialized.")
-        raise HTTPException(status_code=400, detail="System not initialized. Please upload and ingest documents first.")
+        if os.path.exists("./faiss_index"):
+            raise HTTPException(status_code=400, detail="System is still initializing. Please wait a few moments and try again.")
+        else:
+            raise HTTPException(status_code=400, detail="System not initialized. Please upload and ingest documents first.")
     
     start_time = time.time()
     try:

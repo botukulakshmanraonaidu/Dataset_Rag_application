@@ -1,11 +1,12 @@
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
 import os
 
 def create_vector_store(chunks, model_name="all-MiniLM-L6-v2", store_path="./faiss_index"):
     """
     Generates embeddings and stores them in a FAISS vector store.
     """
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from langchain_community.vectorstores import FAISS
+
     print(f"Generating embeddings using {model_name}...")
     embeddings = HuggingFaceEmbeddings(model_name=model_name)
     
@@ -20,6 +21,9 @@ def load_vector_store(store_path="./faiss_index", model_name="all-MiniLM-L6-v2")
     """
     Loads a persisted FAISS vector store.
     """
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from langchain_community.vectorstores import FAISS
+
     embeddings = HuggingFaceEmbeddings(model_name=model_name)
     return FAISS.load_local(store_path, embeddings, allow_dangerous_deserialization=True)
 
