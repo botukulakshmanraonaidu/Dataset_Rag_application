@@ -33,6 +33,11 @@ class HybridRetriever(BaseRetriever):
         """
         Factory method to initialize from chunks.
         """
+        # Force-disable reranking on Render to prevent OOM crash
+        if os.getenv("RENDER") == "true":
+            logger.info("Reranking is force-disabled on Render to prevent OOM crash.")
+            use_reranking = False
+
         # Prepare corpus for BM25 (tokenized)
         tokenized_corpus = [cls._tokenize(doc.page_content) for doc in chunks]
         bm25 = BM25Okapi(tokenized_corpus)
@@ -219,6 +224,11 @@ class HybridRetrieverBuilder:
         if not chunks:
             logger.warning("No chunks available for BM25. Falling back to pure Vector search.")
             return self.vector_store.as_retriever(search_kwargs={"k": k})
+
+        # Force-disable reranking on Render to prevent OOM crash
+        if os.getenv("RENDER") == "true":
+            logger.info("Reranking is force-disabled on Render to prevent OOM crash.")
+            use_reranking = False
 
         # Return our custom HybridRetriever
         return HybridRetriever.from_chunks(
