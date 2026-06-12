@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from pathlib import Path
 from typing import List
 from langchain_core.documents import Document
@@ -7,7 +8,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".docx"}
+SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".docx", ".csv"}
 
 def load_document(file_path: str) -> List[Document]:
     """
@@ -33,6 +34,39 @@ def load_document(file_path: str) -> List[Document]:
             loader = Docx2txtLoader(file_path)
             docs = loader.load()
 
+        elif ext == ".csv":
+            import pandas as pd
+            logger.info(f"Loading CSV file (limiting to first 2000 rows for performance): {file_path}")
+            df = pd.read_csv(file_path, nrows=2000)
+            
+            cols = [c.lower() for c in df.columns]
+            for _, row in df.iterrows():
+                content_parts = []
+                metadata = {"source": os.path.basename(file_path)}
+                
+                # Check for StackOverflow structure
+                if "title" in cols and "body" in cols:
+                    content_parts.append(f"Title: {row.get('Title', row.get('title'))}")
+                    content_parts.append(f"Question: {row.get('Body', row.get('body'))}")
+                elif "body" in cols:
+                    content_parts.append(f"Content: {row.get('Body', row.get('body'))}")
+                else:
+                    # Generic CSV row representation
+                    for col in df.columns:
+                        content_parts.append(f"{col}: {row[col]}")
+                
+                # Add metadata columns if they exist
+                for col in ["id", "score", "parentid", "score", "creationdate"]:
+                    for actual_col in df.columns:
+                        if actual_col.lower() == col:
+                            metadata[col] = str(row[actual_col])
+                
+                # Clean HTML tags
+                doc_text = "\n".join(content_parts)
+                doc_text = re.sub(r'<[^>]*>', '', doc_text)
+                
+                docs.append(Document(page_content=doc_text, metadata=metadata))
+
         else:
             logger.warning(f"Skipping unsupported file type: {file_path}")
             return []
@@ -47,7 +81,7 @@ def load_document(file_path: str) -> List[Document]:
 
 def load_and_chunk_documents(data_dir: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> List[Document]:
     """
-    Loads all supported documents from a directory and splits them into chunks.
+    Loads all supported documents recursively from a directory and splits them into chunks.
     """
     data_path = Path(data_dir)
     if not data_path.exists():
@@ -55,7 +89,13 @@ def load_and_chunk_documents(data_dir: str, chunk_size: int = 1000, chunk_overla
         return []
 
     all_docs = []
-    files = [f for f in data_path.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS]
+    # Search recursively using rglob
+    files = []
+    for ext in SUPPORTED_EXTENSIONS:
+        files.extend(list(data_path.rglob(f"*{ext}")))
+    
+    # Sort files to ensure deterministic ingestion order
+    files = sorted(files)
 
     if not files:
         logger.warning(f"No supported documents found in {data_dir}")

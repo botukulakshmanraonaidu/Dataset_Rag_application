@@ -17,3 +17,5 @@ ragas
 flashrank
 docx2txt
 rank_bm25
+ddgs
+pandas

@@ -51,6 +51,13 @@ function App() {
   const [systemInfo, setSystemInfo] = useState({ size_kb: 0, initialized: false });
   const messagesEndRef = useRef(null);
 
+  // Dynamic Settings States
+  const [modelName, setModelName] = useState('openai/gpt-4o');
+  const [temperature, setTemperature] = useState(0.0);
+  const [hybridAlpha, setHybridAlpha] = useState(0.5);
+  const [useReranking, setUseReranking] = useState(true);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname.replace('/', '');
@@ -71,6 +78,7 @@ function App() {
 
   useEffect(() => {
     fetchHealthAndDocs();
+    fetchSettings();
     const interval = setInterval(fetchHealthAndDocs, 20000); // Poll every 20s
     return () => clearInterval(interval);
   }, []);
@@ -80,6 +88,57 @@ function App() {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
+
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/settings`);
+      const data = await response.json();
+      setModelName(data.model_name || 'openai/gpt-4o');
+      setTemperature(data.temperature !== undefined ? data.temperature : 0.0);
+      setHybridAlpha(data.hybrid_alpha !== undefined ? data.hybrid_alpha : 0.5);
+      setUseReranking(data.use_reranking !== undefined ? data.use_reranking : true);
+    } catch (error) {
+      console.error('Failed to fetch settings:', error);
+    }
+  };
+
+  const handleSaveSettings = async (updates = {}) => {
+    setIsSavingSettings(true);
+    const nextModel = updates.model_name !== undefined ? updates.model_name : modelName;
+    const nextTemp = updates.temperature !== undefined ? parseFloat(updates.temperature) : temperature;
+    const nextAlpha = updates.hybrid_alpha !== undefined ? parseFloat(updates.hybrid_alpha) : hybridAlpha;
+    const nextRerank = updates.use_reranking !== undefined ? updates.use_reranking : useReranking;
+    
+    const payload = {
+      model_name: nextModel,
+      temperature: nextTemp,
+      max_tokens: 1000,
+      hybrid_alpha: nextAlpha,
+      hybrid_beta: parseFloat((1.0 - nextAlpha).toFixed(2)),
+      use_reranking: nextRerank
+    };
+
+    try {
+      const response = await fetch(`${API_BASE}/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setModelName(data.settings.model_name);
+        setTemperature(data.settings.temperature);
+        setHybridAlpha(data.settings.hybrid_alpha);
+        setUseReranking(data.settings.use_reranking);
+      } else {
+        throw new Error(data.detail || 'Failed to save settings');
+      }
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   const fetchHealthAndDocs = async () => {
     try {
@@ -216,10 +275,10 @@ function App() {
   };
 
   const suggestedQueries = [
-    "What is the company's remote work policy?",
-    "How do I request time off or vacation?",
-    "What are the core values of the organization?",
-    "Summarize the key policies in the uploaded documents."
+    "How can I find the full path to a font from its display name on a Mac?",
+    "Is there a simple way to get a preview JPEG of a PDF on Windows?",
+    "What continuous integration systems are suitable for a Python codebase?",
+    "How do I iterate over a result set using cx_Oracle in Python?"
   ];
 
   return (
@@ -546,7 +605,7 @@ function App() {
             <div className="screen-container">
               <div className="screen-header">
                 <h1 className="screen-title">System Settings</h1>
-                <p className="screen-subtitle">Adjust core LLM parameters, privacy guardrails, and caching behaviors.</p>
+                <p className="screen-subtitle">Adjust core LLM parameters, search weights, and caching behaviors in real-time.</p>
               </div>
               <div className="settings-section">
                 <h3 className="settings-section-title">Model Configuration</h3>
@@ -555,10 +614,17 @@ function App() {
                     <div className="setting-name">Active Engine</div>
                     <div className="setting-desc">Select the primary LLM used for inference and summarization.</div>
                   </div>
-                  <select className="settings-select">
-                    <option>GPT-40 Architect (Recommended)</option>
-                    <option>Claude Enterprise</option>
-                    <option>Llama 4 70B Local</option>
+                  <select 
+                    className="settings-select" 
+                    value={modelName}
+                    onChange={(e) => {
+                      setModelName(e.target.value);
+                      handleSaveSettings({ model_name: e.target.value });
+                    }}
+                  >
+                    <option value="openai/gpt-4o">GPT-4o Architect (Recommended)</option>
+                    <option value="anthropic/claude-3-5-sonnet">Claude Enterprise</option>
+                    <option value="meta/llama-3.1-70b-instruct">Llama 4 70B Local</option>
                   </select>
                 </div>
                 <div className="setting-row">
@@ -566,11 +632,63 @@ function App() {
                     <div className="setting-name">Temperature</div>
                     <div className="setting-desc">Controls the creativity of the responses. Lower values are more deterministic.</div>
                   </div>
-                  <select className="settings-select">
-                    <option>0.0 (Precise)</option>
-                    <option>0.3 (Balanced)</option>
-                    <option>0.7 (Creative)</option>
+                  <select 
+                    className="settings-select"
+                    value={temperature}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setTemperature(val);
+                      handleSaveSettings({ temperature: val });
+                    }}
+                  >
+                    <option value="0.0">0.0 (Precise)</option>
+                    <option value="0.3">0.3 (Balanced)</option>
+                    <option value="0.7">0.7 (Creative)</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3 className="settings-section-title">RAG Retrieval Optimization</h3>
+                <div className="setting-row">
+                  <div className="setting-info">
+                    <div className="setting-name">Hybrid Weight (Alpha)</div>
+                    <div className="setting-desc">
+                      Balance Keyword Search ({Math.round(hybridAlpha * 100)}%) and Semantic Search ({Math.round((1 - hybridAlpha) * 100)}%).
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '200px' }}>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="1" 
+                      step="0.05"
+                      value={hybridAlpha}
+                      onChange={(e) => setHybridAlpha(parseFloat(e.target.value))}
+                      onMouseUp={(e) => handleSaveSettings({ hybrid_alpha: parseFloat(e.target.value) })}
+                      onTouchEnd={(e) => handleSaveSettings({ hybrid_alpha: parseFloat(e.target.value) })}
+                      style={{ flex: 1, cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', width: '32px', textAlign: 'right' }}>{hybridAlpha.toFixed(2)}</span>
+                  </div>
+                </div>
+                
+                <div className="setting-row">
+                  <div className="setting-info">
+                    <div className="setting-name">FlashRank Re-ranking</div>
+                    <div className="setting-desc">Enable lightweight cross-encoder model to re-order hybrid documents for top accuracy.</div>
+                  </div>
+                  <label className="toggle-switch">
+                    <input 
+                      type="checkbox" 
+                      checked={useReranking}
+                      onChange={(e) => {
+                        setUseReranking(e.target.checked);
+                        handleSaveSettings({ use_reranking: e.target.checked });
+                      }}
+                    />
+                    <span className="toggle-slider"></span>
+                  </label>
                 </div>
               </div>
 

@@ -123,3 +123,6 @@ pnpm-debug.log*
 *.bak
 *.swp
 .cache/
+archive/
+archive.zip
+

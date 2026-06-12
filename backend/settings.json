@@ -1,0 +1,8 @@
+{
+  "model_name": "openai/gpt-4o",
+  "temperature": 0.0,
+  "max_tokens": 1000,
+  "hybrid_alpha": 0.5,
+  "hybrid_beta": 0.5,
+  "use_reranking": true
+}

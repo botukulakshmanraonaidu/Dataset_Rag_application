@@ -10,21 +10,27 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
-def get_qa_chain(retriever: BaseRetriever):
+def get_qa_chain(retriever: BaseRetriever, settings: dict = None):
     """
     Creates a RetrievalQA chain using the provided retriever (can be FAISS or Hybrid).
     """
+    if settings is None:
+        settings = {}
+
     api_key = os.getenv("OPENAI_API_KEY")
     base_url = os.getenv("OPENAI_BASE_URL", None)
-    model_name = os.getenv("MODEL_NAME", "openai/gpt-4o")
-    max_tokens = int(os.getenv("MAX_TOKENS", "1000"))
+    
+    # Use dynamic settings or fall back to env/defaults
+    model_name = settings.get("model_name") or os.getenv("MODEL_NAME", "openai/gpt-4o")
+    temperature = settings.get("temperature", 0.0)
+    max_tokens = settings.get("max_tokens") or int(os.getenv("MAX_TOKENS", "1000"))
 
     if not api_key:
         raise ValueError("OPENAI_API_KEY is not set in .env file!")
 
     llm = ChatOpenAI(
         model_name=model_name,
-        temperature=0,
+        temperature=temperature,
         max_tokens=max_tokens,        # Explicitly limit tokens to avoid 402 error
         openai_api_key=api_key,
         openai_api_base=base_url,
@@ -40,22 +46,24 @@ def get_qa_chain(retriever: BaseRetriever):
 🔍 Retrieval Strategy
 Analyze the provided context (Vector search + BM25 + Web Fallback).
 Combine results intelligently.
-If the information is from a Web Search fallback, ensure the response is detailed.
 
 🧠 Answering Rules
-Use ONLY the provided context. Do NOT hallucinate.
-If using Web Search results:
-→ You MUST provide a MINIMUM of THREE (3) lines of detailed response.
-→ Clearly mention that the source is from a Web Search.
-If information is missing completely:
-→ Clearly say: "I don’t have enough information in the provided data".
+1. Use ONLY the provided context. Do NOT hallucinate.
+2. Your response MUST consist of EXACTLY four (4) lines of text separated by newline characters. Do not output a single paragraph; output exactly 4 separate lines.
+3. Keep the output extremely dense and concise to minimize token usage.
+4. If using Web Search results, one of the lines MUST state: "Source: Web Search (DuckDuckGo)".
+5. If information is missing completely, your response must be exactly:
+"I don't have enough information in the provided data.
+Please verify your question or try another query.
+No local documents matched this search.
+Source: System Database."
 
 Context:
 {context}
 
 Question: {question}
 
-Helpful Answer:"""
+Helpful Answer (EXACTLY 4 lines):"""
     
     QA_CHAIN_PROMPT = PromptTemplate(
         input_variables=["context", "question"],
@@ -84,6 +92,10 @@ Helpful Answer:"""
             result = self.local_chain.invoke(inputs)
             source_docs = result.get("source_documents", [])
             answer = str(result.get("result", ""))
+            
+            logger.debug(f"LOCAL RAG ANSWER: {answer}")
+            for i, doc in enumerate(source_docs):
+                logger.debug(f"LOCAL RAG DOC {i+1}: {doc.metadata.get('source', 'Unknown')} - {doc.page_content[:150]}...")
             
             # Fallback if no docs found or if the answer indicates missing info
             normalized_answer = answer.lower().replace("’", "'")

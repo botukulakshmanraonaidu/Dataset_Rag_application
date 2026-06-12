@@ -3,6 +3,7 @@ import sys
 import shutil
 import logging
 import re
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # Now we can import from src
 try:
-    from src.ingestion import load_and_chunk_documents
+    from src.ingestion import load_and_chunk_documents, SUPPORTED_EXTENSIONS
     from src.vector_store import create_vector_store, load_vector_store
     from src.qa_chain import get_qa_chain
     from src.retrievers import HybridRetrieverBuilder, get_hybrid_retriever_from_store
@@ -54,7 +55,7 @@ app = FastAPI(title="Enterprise Document QA System")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -64,28 +65,132 @@ vector_store = None
 retriever = None
 qa_chain = None
 
-@app.on_event("startup")
-async def startup_event():
+SETTINGS_FILE = Path(__file__).resolve().parent.parent / "settings.json"
+
+def load_settings() -> dict:
+    default_settings = {
+        "model_name": "openai/gpt-4o",
+        "temperature": 0.0,
+        "max_tokens": 1000,
+        "hybrid_alpha": 0.5,
+        "hybrid_beta": 0.5,
+        "use_reranking": True
+    }
+    if not SETTINGS_FILE.exists():
+        return default_settings
+    try:
+        with open(SETTINGS_FILE, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading settings.json: {e}")
+        return default_settings
+
+def save_settings(settings: dict):
+    try:
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(settings, f, indent=2)
+    except Exception as e:
+        logger.error(f"Error saving settings.json: {e}")
+
+def reinitialize_system():
     global vector_store, retriever, qa_chain
     try:
+        settings = load_settings()
         if os.path.exists("./faiss_index"):
-            logger.info("Loading existing vector store from ./faiss_index...")
-            vector_store = load_vector_store()
+            if vector_store is None:
+                logger.info("Loading existing vector store from ./faiss_index...")
+                vector_store = load_vector_store()
             
-            logger.info("Initializing Hybrid Retriever...")
-            # Read weights from env or default to 0.5
-            alpha = float(os.getenv("HYBRID_ALPHA", "0.5"))
-            beta = float(os.getenv("HYBRID_BETA", "0.5"))
+            logger.info("Initializing Hybrid Retriever with current settings...")
+            alpha = settings.get("hybrid_alpha", 0.5)
+            beta = settings.get("hybrid_beta", 0.5)
+            use_reranking = settings.get("use_reranking", True)
             
             builder = HybridRetrieverBuilder(vector_store)
-            retriever = builder.get_hybrid_retriever(alpha=alpha, beta=beta)
+            retriever = builder.get_hybrid_retriever(
+                alpha=alpha,
+                beta=beta,
+                use_reranking=use_reranking
+            )
             
-            qa_chain = get_qa_chain(retriever)
-            logger.info(f"System initialized successfully (Hybrid w/ Alpha={alpha}, Beta={beta}).")
+            qa_chain = get_qa_chain(retriever, settings)
+            logger.info(f"System initialized successfully (Hybrid w/ Alpha={alpha}, Beta={beta}, Rerank={use_reranking}).")
         else:
             logger.info("No existing index found. System ready for document ingestion.")
+            retriever = None
+            qa_chain = None
     except Exception as e:
-        logger.error(f"Failed to initialize system on startup: {str(e)}")
+        logger.error(f"Failed to reinitialize system: {str(e)}")
+
+DEFAULT_POLICY_TEXT = """# ACME Corporation - Employee Handbook & Key Policies
+
+## Core Values of the Organization
+ACME Corporation is built on four fundamental core values:
+1. Integrity: We hold ourselves to the highest ethical standards in all interactions.
+2. Innovation: We constantly push boundaries to create forward-thinking solutions.
+3. Customer-First: Our customers' success and satisfaction drive everything we do.
+4. Collaboration: We believe that diverse, inclusive teams produce the best results.
+
+## Remote Work Policy
+At ACME Corporation, we support a hybrid work model to encourage work-life balance:
+- Employees are eligible for up to 3 days of remote work per week, subject to approval from their direct manager.
+- Core collaboration days are Tuesdays and Thursdays, during which all local employees are expected to work from the office.
+- A high-speed internet connection and a quiet, secure workspace are required for remote work days.
+
+## Time Off and Vacation Requests
+We believe rest is essential for high performance. Our vacation policy is as follows:
+- Full-time employees receive 20 days of paid annual leave per calendar year.
+- To request time off or vacation, employees must submit a request through the internal HR Portal (HRIS) at least two weeks (14 days) in advance.
+- For emergency leave or sick leave, notify your manager as early as possible on the day of absence.
+
+## General Security & Compliance Policies
+- Clean Desk Policy: Employees must lock their workstations when leaving their desks and secure any physical documents containing sensitive data.
+- Device Security: All work devices must run the corporate security suite and use multi-factor authentication (MFA) for access.
+- Code of Conduct: We maintain a professional, respectful, and harassment-free work environment for all employees.
+"""
+
+@app.on_event("startup")
+async def startup_event():
+    global vector_store
+    
+    # Ensure data directory exists
+    data_dir = Path("./data")
+    data_dir.mkdir(exist_ok=True)
+    
+    # Check for supported files recursively
+    files = []
+    for ext in SUPPORTED_EXTENSIONS:
+        files.extend(list(data_dir.rglob(f"*{ext}")))
+    
+    # If no faiss_index exists, automatically ingest on startup
+    if not os.path.exists("./faiss_index"):
+        # If no supported files exist recursively, seed default dataset
+        if not files:
+            logger.info("No documents or index found. Seeding default ACME company policies dataset...")
+            try:
+                default_file = data_dir / "company_policies.txt"
+                with open(default_file, "w", encoding="utf-8") as f:
+                    f.write(DEFAULT_POLICY_TEXT)
+                # Refresh files list
+                for ext in SUPPORTED_EXTENSIONS:
+                    files.extend(list(data_dir.rglob(f"*{ext}")))
+            except Exception as e:
+                logger.error(f"Failed to auto-seed default dataset: {str(e)}")
+        
+        # Ingest whatever files we have recursively
+        if files:
+            logger.info(f"Automatically ingesting dataset recursively on startup ({len(files)} files found)...")
+            try:
+                chunks = load_and_chunk_documents("./data")
+                if chunks:
+                    vector_store = create_vector_store(chunks)
+                    builder = HybridRetrieverBuilder(vector_store)
+                    builder.save_chunks(chunks)
+                    logger.info("Dataset ingested successfully on startup.")
+            except Exception as e:
+                logger.error(f"Failed to auto-ingest dataset: {str(e)}")
+            
+    reinitialize_system()
 
 @app.get("/")
 async def root():
@@ -162,6 +267,24 @@ async def ask_question(query: Query):
         logger.error(f"Error during QA chain invocation: {str(e)}")
         raise HTTPException(status_code=500, detail=f"LLM error: {str(e)}")
 
+class SettingsModel(BaseModel):
+    model_name: str
+    temperature: float
+    max_tokens: int
+    hybrid_alpha: float
+    hybrid_beta: float
+    use_reranking: bool
+
+@app.get("/settings")
+def get_settings():
+    return load_settings()
+
+@app.post("/settings")
+def update_settings(new_settings: SettingsModel):
+    save_settings(new_settings.model_dump())
+    reinitialize_system()
+    return {"message": "Settings updated successfully", "settings": load_settings()}
+
 @app.post("/ingest")
 def ingest_documents():
     global vector_store, qa_chain
@@ -177,19 +300,16 @@ def ingest_documents():
         # run this in a threadpool so it doesn't block other requests.
         vector_store = create_vector_store(chunks)
         
-        # Read weights from env or default to 0.5
-        alpha = float(os.getenv("HYBRID_ALPHA", "0.5"))
-        beta = float(os.getenv("HYBRID_BETA", "0.5"))
-        
-        # New Hybrid Logic: Persist chunks and build hybrid retriever
+        # New Hybrid Logic: Persist chunks
         builder = HybridRetrieverBuilder(vector_store)
         builder.save_chunks(chunks)
-        retriever = builder.get_hybrid_retriever(chunks, alpha=alpha, beta=beta)
         
-        qa_chain = get_qa_chain(retriever)
+        # Reinitialize everything with current settings
+        reinitialize_system()
         
-        logger.info(f"Ingestion complete. {len(chunks)} chunks indexed (Hybrid w/ Alpha={alpha}, Beta={beta}).")
-        return {"message": f"Successfully ingested {len(chunks)} chunks using Hybrid Retrieval (Alpha={alpha}, Beta={beta})."}
+        settings = load_settings()
+        logger.info(f"Ingestion complete. {len(chunks)} chunks indexed (Hybrid w/ Alpha={settings.get('hybrid_alpha')}, Beta={settings.get('hybrid_beta')}).")
+        return {"message": f"Successfully ingested {len(chunks)} chunks using Hybrid Retrieval."}
     except Exception as e:
         logger.error(f"Ingestion error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
@@ -227,21 +347,28 @@ def upload_file(file: UploadFile = File(...)):
 
 @app.get("/documents")
 async def list_documents():
-    """Returns a list of documents in the data directory."""
+    """Returns a list of documents recursively in the data directory."""
     try:
         data_dir = Path("./data")
         if not data_dir.exists():
             return []
         
         files = []
-        for path in sorted(data_dir.iterdir()):
+        paths = []
+        for ext in SUPPORTED_EXTENSIONS:
+            paths.extend(list(data_dir.rglob(f"*{ext}")))
+            
+        for path in sorted(paths):
             if path.is_file():
                 # Correctly format the modification timestamp
                 import datetime
                 mtime = datetime.datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
                 
+                # Show relative subpaths (e.g. archive/Questions.csv)
+                rel_name = path.relative_to(data_dir).as_posix()
+                
                 files.append({
-                    "name": path.name,
+                    "name": rel_name,
                     "size_kb": max(1, round(path.stat().st_size / 1024)),
                     "modified": mtime
                 })
@@ -275,7 +402,7 @@ async def delete_document(filename: str):
 @app.delete("/documents")
 async def delete_documents():
     """Clears all documents and the vector index."""
-    global vector_store, qa_chain
+    global vector_store, qa_chain, retriever
     try:
         # Clear data directory
         data_dir = Path("./data")
@@ -299,6 +426,7 @@ async def delete_documents():
         # Reset state
         vector_store = None
         qa_chain = None
+        retriever = None
         
         logger.info("Knowledge base cleared successfully.")
         return {"message": "Knowledge base cleared successfully."}

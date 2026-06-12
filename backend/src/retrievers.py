@@ -23,19 +23,20 @@ class HybridRetriever(BaseRetriever):
     beta: float = 0.5   # Weight for Vector Search
     k: int = 4          # Number of documents to return
     threshold: float = 0.15 # Score threshold for fallback triggering
+    use_reranking: bool = True # Whether to use FlashRank reranking
 
     class Config:
         arbitrary_types_allowed = True
 
     @classmethod
-    def from_chunks(cls, vector_store, chunks: List[Document], alpha: float = 0.5, beta: float = 0.5, k: int = 4, threshold: float = 0.15):
+    def from_chunks(cls, vector_store, chunks: List[Document], alpha: float = 0.5, beta: float = 0.5, k: int = 4, threshold: float = 0.15, use_reranking: bool = True):
         """
         Factory method to initialize from chunks.
         """
         # Prepare corpus for BM25 (tokenized)
         tokenized_corpus = [cls._tokenize(doc.page_content) for doc in chunks]
         bm25 = BM25Okapi(tokenized_corpus)
-        return cls(vector_store=vector_store, chunks=chunks, bm25=bm25, alpha=alpha, beta=beta, k=k, threshold=threshold)
+        return cls(vector_store=vector_store, chunks=chunks, bm25=bm25, alpha=alpha, beta=beta, k=k, threshold=threshold, use_reranking=use_reranking)
 
     @staticmethod
     def _tokenize(text: str) -> List[str]:
@@ -93,18 +94,64 @@ class HybridRetriever(BaseRetriever):
             logger.info(f"No documents met the relevance threshold ({self.threshold}). Returning empty list.")
             return []
 
-        # 6. Remove duplicates and take top k
+        # 6. Remove duplicates and collect candidates for reranking
         seen_content = set()
         unique_results = []
+        candidate_limit = max(15, self.k * 3) if self.use_reranking else self.k
         for doc, score in qualified_results:
             if doc.page_content not in seen_content:
                 unique_results.append(doc)
                 seen_content.add(doc.page_content)
-            if len(unique_results) >= self.k:
+            if len(unique_results) >= candidate_limit:
                 break
                 
+        # 7. Apply FlashRank Reranking if enabled
+        if self.use_reranking and unique_results:
+            try:
+                from flashrank import Ranker, RerankRequest
+                global _global_ranker
+                if '_global_ranker' not in globals():
+                    logger.info("Initializing FlashRank Ranker...")
+                    _global_ranker = Ranker()
+                
+                passages = [
+                    {"id": i, "text": doc.page_content, "meta": doc.metadata}
+                    for i, doc in enumerate(unique_results)
+                ]
+                rerank_request = RerankRequest(query=query, passages=passages)
+                reranked_results = _global_ranker.rerank(rerank_request)
+                
+                # Reconstruct list of Documents in new rank order
+                reranked_docs = []
+                for item in reranked_results:
+                    original_idx = item["id"]
+                    reranked_docs.append(unique_results[original_idx])
+                
+                unique_results = reranked_docs
+                logger.info(f"FlashRank reranking complete. Re-ranked {len(unique_results)} candidates.")
+            except Exception as e:
+                logger.error(f"FlashRank Reranking failed: {e}. Falling back to default hybrid order.")
+                
         logger.info(f"Hybrid retrieval complete. Best score: {qualified_results[0][1]:.4f}")
-        return unique_results
+        
+        # 8. StackOverflow context enrichment: For each retrieved question, fetch its answers from the corpus.
+        final_docs = []
+        for doc in unique_results[:self.k]:
+            final_docs.append(doc)
+            doc_id = doc.metadata.get("id")
+            # If it's a question (has 'id', no 'parentid')
+            if doc_id and "parentid" not in doc.metadata:
+                answers_found = 0
+                for chunk in self.chunks:
+                    parent_id = chunk.metadata.get("parentid")
+                    if parent_id == doc_id:
+                        if chunk not in final_docs:
+                            final_docs.append(chunk)
+                            answers_found += 1
+                if answers_found > 0:
+                    logger.info(f"Enriched question ID {doc_id} with {answers_found} answer chunk(s) from local corpus.")
+
+        return final_docs
 
 class HybridRetrieverBuilder:
     def __init__(self, vector_store, chunks_path="./bm25_chunks.json"):
@@ -161,7 +208,8 @@ class HybridRetrieverBuilder:
             return []
 
     def get_hybrid_retriever(self, chunks: List[Document] = None, 
-                             alpha: float = 0.5, beta: float = 0.5, k: int = 4) -> BaseRetriever:
+                             alpha: float = 0.5, beta: float = 0.5, k: int = 4,
+                             use_reranking: bool = True) -> BaseRetriever:
         """
         Builds the custom HybridRetriever instance.
         """
@@ -178,7 +226,8 @@ class HybridRetrieverBuilder:
             chunks=chunks,
             alpha=alpha,
             beta=beta,
-            k=k
+            k=k,
+            use_reranking=use_reranking
         )
 
 def get_hybrid_retriever_from_store(vector_store, chunks_path="./bm25_chunks.pkl"):
