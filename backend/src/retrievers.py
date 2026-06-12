@@ -3,7 +3,7 @@ import pickle
 import json
 import logging
 import re
-from typing import List, Optional
+from typing import List, Optional, Any
 from rank_bm25 import BM25Okapi
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
@@ -16,7 +16,7 @@ class HybridRetriever(BaseRetriever):
     A custom hybrid retriever that combines BM25 keyword search and FAISS semantic search.
     Implements weighted scoring: final_score = alpha * bm25_score + beta * vector_score.
     """
-    vector_store: any
+    vector_store: Any
     chunks: List[Document]
     bm25: BM25Okapi
     alpha: float = 0.5  # Weight for BM25

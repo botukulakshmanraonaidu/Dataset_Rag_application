@@ -206,7 +206,7 @@ async def startup_event():
     # Start background initialization task to prevent blocking the port binding
     asyncio.create_task(initialize_system_background())
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
     return {
         "message": "Enterprise Document QA API (FastAPI)",
@@ -215,7 +215,7 @@ async def root():
         "health_url": "/health",
     }
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
     data_dir = Path("./data")
     files = list(data_dir.glob("*")) if data_dir.exists() else []
