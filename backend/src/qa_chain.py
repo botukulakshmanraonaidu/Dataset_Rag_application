@@ -23,7 +23,7 @@ def get_qa_chain(retriever: BaseRetriever, settings: dict = None):
     # Use dynamic settings or fall back to env/defaults
     model_name = settings.get("model_name") or os.getenv("MODEL_NAME", "openai/gpt-4o")
     temperature = settings.get("temperature", 0.0)
-    max_tokens = settings.get("max_tokens") or int(os.getenv("MAX_TOKENS", "1000"))
+    max_tokens = settings.get("max_tokens") or int(os.getenv("MAX_TOKENS", "300"))
 
     if not api_key:
         raise ValueError("OPENAI_API_KEY is not set in .env file!")

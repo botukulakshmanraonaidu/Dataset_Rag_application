@@ -1,0 +1,52 @@
+[
+  {
+    "question": "How can I find the full path to a font from its display name on a Mac?",
+    "ground_truth": "To find font paths on Mac, you can run the terminal command 'locate InsertFontHere' to spit out matching files, or manually iterate through the standard font directories including '/System/Library/Fonts', '/Library/Fonts', and '~/Library/Fonts'.",
+    "source": "Questions.csv"
+  },
+  {
+    "question": "Is there a simple way to get a preview JPEG of a PDF on Windows?",
+    "ground_truth": "You can generate a JPEG preview of a PDF file using the ImageMagick 'convert' command (e.g., 'convert taxes.pdf taxes.jpg') or by writing Python scripts using tools like pdf2image or PyMuPDF.",
+    "source": "Questions.csv"
+  },
+  {
+    "question": "What continuous integration systems are suitable for a Python codebase?",
+    "ground_truth": "Suitable continuous integration systems for Python include Hudson (Jenkins), which has integration for Python projects, or Buildbot (often run alongside Trac) which allows running tests across multiple OS environments like OSX, Linux, and Windows.",
+    "source": "Questions.csv"
+  },
+  {
+    "question": "How do I iterate over a result set using cx_Oracle in Python?",
+    "ground_truth": "In cx_Oracle, you can iterate over a cursor directly in a loop (e.g., 'for row in cursor'), use 'cursor.fetchone()' to fetch single rows, use 'cursor.fetchmany(size)' to fetch rows in batches, or use 'cursor.fetchall()' to load all rows into memory.",
+    "source": "Questions.csv"
+  },
+  {
+    "question": "How do you express binary literals in Python?",
+    "ground_truth": "Binary literals are expressed in Python using the '0b' or '0B' prefix followed by binary digits, such as '0b1010' for the decimal value 10.",
+    "source": "Questions.csv"
+  },
+  {
+    "question": "What are the core values of ACME Corporation?",
+    "ground_truth": "ACME Corporation is built on four core values: Integrity (ethical standards), Innovation (forward-thinking solutions), Customer-First (customer success/satisfaction), and Collaboration (diverse, inclusive teams).",
+    "source": "company_policies.txt"
+  },
+  {
+    "question": "How many days are employees eligible for remote work per week at ACME?",
+    "ground_truth": "Employees are eligible for up to 3 days of remote work per week, subject to approval from their direct manager.",
+    "source": "company_policies.txt"
+  },
+  {
+    "question": "What are the core collaboration days at ACME Corporation?",
+    "ground_truth": "The core collaboration days are Tuesdays and Thursdays, during which all local employees are expected to work from the office.",
+    "source": "company_policies.txt"
+  },
+  {
+    "question": "What is the vacation request policy at ACME Corporation?",
+    "ground_truth": "Full-time employees receive 20 days of paid annual leave per calendar year. Vacation requests must be submitted through the internal HR Portal (HRIS) at least two weeks (14 days) in advance.",
+    "source": "company_policies.txt"
+  },
+  {
+    "question": "What is the Clean Desk Policy at ACME Corporation?",
+    "ground_truth": "The Clean Desk Policy requires employees to lock their workstations when leaving their desks and to secure any physical documents containing sensitive data.",
+    "source": "company_policies.txt"
+  }
+]

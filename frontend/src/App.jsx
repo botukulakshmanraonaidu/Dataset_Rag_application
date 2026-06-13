@@ -281,7 +281,9 @@ function App() {
     "How can I find the full path to a font from its display name on a Mac?",
     "Is there a simple way to get a preview JPEG of a PDF on Windows?",
     "What continuous integration systems are suitable for a Python codebase?",
-    "How do I iterate over a result set using cx_Oracle in Python?"
+    "How do I iterate over a result set using cx_Oracle in Python?",
+    "How do you express binary literals in Python?",
+    "How do you add a method to an existing object instance in Python?"
   ];
 
   return (

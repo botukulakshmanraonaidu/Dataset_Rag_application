@@ -71,7 +71,7 @@ def load_settings() -> dict:
     default_settings = {
         "model_name": "openai/gpt-4o",
         "temperature": 0.0,
-        "max_tokens": 1000,
+        "max_tokens": 300,
         "hybrid_alpha": 0.5,
         "hybrid_beta": 0.5,
         "use_reranking": True
@@ -96,17 +96,20 @@ def reinitialize_system():
     global vector_store, retriever, qa_chain
     try:
         settings = load_settings()
-        if os.path.exists("./faiss_index"):
+        faiss_dir = BACKEND_DIR / "faiss_index"
+        bm25_path = BACKEND_DIR / "bm25_chunks.json"
+        
+        if faiss_dir.exists():
             if vector_store is None:
-                logger.info("Loading existing vector store from ./faiss_index...")
-                vector_store = load_vector_store()
+                logger.info(f"Loading existing vector store from {faiss_dir}...")
+                vector_store = load_vector_store(store_path=str(faiss_dir))
             
             logger.info("Initializing Hybrid Retriever with current settings...")
             alpha = settings.get("hybrid_alpha", 0.5)
             beta = settings.get("hybrid_beta", 0.5)
             use_reranking = settings.get("use_reranking", True)
             
-            builder = HybridRetrieverBuilder(vector_store)
+            builder = HybridRetrieverBuilder(vector_store, chunks_path=str(bm25_path))
             retriever = builder.get_hybrid_retriever(
                 alpha=alpha,
                 beta=beta,
@@ -155,7 +158,7 @@ async def initialize_system_background():
     import asyncio
     try:
         logger.info("Starting background system initialization...")
-        data_dir = Path("./data")
+        data_dir = BACKEND_DIR / "data"
         data_dir.mkdir(exist_ok=True)
         
         # Check for supported files recursively
@@ -164,7 +167,9 @@ async def initialize_system_background():
             files.extend(list(data_dir.rglob(f"*{ext}")))
         
         # If no faiss_index exists, automatically ingest on startup
-        if not os.path.exists("./faiss_index"):
+        faiss_dir = BACKEND_DIR / "faiss_index"
+        bm25_path = BACKEND_DIR / "bm25_chunks.json"
+        if not faiss_dir.exists():
             # If no supported files exist recursively, seed default dataset
             if not files:
                 logger.info("No documents or index found. Seeding default ACME company policies dataset...")
@@ -184,10 +189,10 @@ async def initialize_system_background():
                 logger.info(f"Automatically ingesting dataset recursively in background ({len(files)} files found)...")
                 try:
                     loop = asyncio.get_event_loop()
-                    chunks = await loop.run_in_executor(None, load_and_chunk_documents, "./data")
+                    chunks = await loop.run_in_executor(None, load_and_chunk_documents, str(data_dir))
                     if chunks:
-                        vector_store = await loop.run_in_executor(None, create_vector_store, chunks)
-                        builder = HybridRetrieverBuilder(vector_store)
+                        vector_store = await loop.run_in_executor(None, create_vector_store, chunks, "all-MiniLM-L6-v2", str(faiss_dir))
+                        builder = HybridRetrieverBuilder(vector_store, chunks_path=str(bm25_path))
                         await loop.run_in_executor(None, builder.save_chunks, chunks)
                         logger.info("Dataset ingested successfully in background.")
                 except Exception as e:
@@ -217,7 +222,8 @@ async def root():
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
-    data_dir = Path("./data")
+    data_dir = BACKEND_DIR / "data"
+    faiss_dir = BACKEND_DIR / "faiss_index"
     files = list(data_dir.glob("*")) if data_dir.exists() else []
     total_size = sum(f.stat().st_size for f in files if f.is_file())
     
@@ -225,7 +231,7 @@ async def health_check():
         "status": "ok", 
         "initialized": qa_chain is not None,
         "has_files": len(files) > 0,
-        "index_exists": os.path.exists("./faiss_index"),
+        "index_exists": faiss_dir.exists(),
         "total_docs": len([f for f in files if f.is_file()]),
         "total_size_kb": max(0, round(total_size / 1024, 2))
     }
@@ -246,7 +252,8 @@ class Response(BaseModel):
 async def ask_question(query: Query):
     if not qa_chain:
         logger.warning("Query received but QA chain not initialized.")
-        if os.path.exists("./faiss_index"):
+        faiss_dir = BACKEND_DIR / "faiss_index"
+        if faiss_dir.exists():
             raise HTTPException(status_code=400, detail="System is still initializing. Please wait a few moments and try again.")
         else:
             raise HTTPException(status_code=400, detail="System not initialized. Please upload and ingest documents first.")
@@ -307,18 +314,21 @@ def ingest_documents():
     global vector_store, qa_chain
     try:
         logger.info("Starting document ingestion process (CPU intensive)...")
-        chunks = load_and_chunk_documents("./data")
+        data_dir = BACKEND_DIR / "data"
+        faiss_dir = BACKEND_DIR / "faiss_index"
+        bm25_path = BACKEND_DIR / "bm25_chunks.json"
+        chunks = load_and_chunk_documents(str(data_dir))
         
         if not chunks:
-            logger.warning("Ingestion failed: No documents found or parsed in ./data")
+            logger.warning(f"Ingestion failed: No documents found or parsed in {data_dir}")
             return {"message": "No documents found in data directory. Please upload files first."}
         
         # This part is heavy CPU work; using standard 'def' lets FastAPI 
         # run this in a threadpool so it doesn't block other requests.
-        vector_store = create_vector_store(chunks)
+        vector_store = create_vector_store(chunks, store_path=str(faiss_dir))
         
         # New Hybrid Logic: Persist chunks
-        builder = HybridRetrieverBuilder(vector_store)
+        builder = HybridRetrieverBuilder(vector_store, chunks_path=str(bm25_path))
         builder.save_chunks(chunks)
         
         # Reinitialize everything with current settings
@@ -344,7 +354,7 @@ def sanitize_filename(filename: str) -> str:
 @app.post("/upload")
 def upload_file(file: UploadFile = File(...)):
     try:
-        data_dir = Path("./data")
+        data_dir = BACKEND_DIR / "data"
         data_dir.mkdir(exist_ok=True)
         
         filename = getattr(file, 'filename', None) or "document"
@@ -366,7 +376,7 @@ def upload_file(file: UploadFile = File(...)):
 async def list_documents():
     """Returns a list of documents recursively in the data directory."""
     try:
-        data_dir = Path("./data")
+        data_dir = BACKEND_DIR / "data"
         if not data_dir.exists():
             return []
         
@@ -398,7 +408,7 @@ async def list_documents():
 async def delete_document(filename: str):
     """Deletes a single document."""
     try:
-        data_dir = Path("./data")
+        data_dir = BACKEND_DIR / "data"
         file_path = data_dir / filename
         
         # Security check to prevent path traversal
@@ -421,24 +431,25 @@ async def delete_documents():
     """Clears all documents and the vector index."""
     global vector_store, qa_chain, retriever
     try:
+        data_dir = BACKEND_DIR / "data"
+        faiss_dir = BACKEND_DIR / "faiss_index"
+        bm25_path = BACKEND_DIR / "bm25_chunks.json"
+        
         # Clear data directory
-        data_dir = Path("./data")
         if data_dir.exists():
             for path in data_dir.iterdir():
                 if path.is_file():
                     path.unlink()
         
         # Clear FAISS index
-        faiss_dir = Path("./faiss_index")
         if faiss_dir.exists():
             shutil.rmtree(str(faiss_dir))
             
         # Clear BM25 indexes (including legacy)
-        for idx_file in ["bm25_chunks.json", "bm25_chunks.pkl"]:
-            idx_path = Path(idx_file)
+        for idx_path in [bm25_path, BACKEND_DIR / "bm25_chunks.pkl"]:
             if idx_path.exists():
                 idx_path.unlink()
-                logger.info(f"Removed index file: {idx_file}")
+                logger.info(f"Removed index file: {idx_path}")
         
         # Reset state
         vector_store = None
