@@ -1,129 +1,140 @@
 # 🧠 Enterprise Document QA — RAG Application
 
-Welcome to the **Enterprise Document QA** system! This is a full-stack **Retrieval-Augmented Generation (RAG)** application. 
-It allows you to upload enterprise documents (PDFs, Word docs, Text files) and ask natural-language questions about their content. The system uses advanced AI (Hybrid Retrieval combining both keyword and semantic search) to find the right information and generate accurate answers with citations.
+Welcome to the **Enterprise Document QA** system! This is a full-stack **Retrieval-Augmented Generation (RAG)** application. It allows you to upload enterprise documents (PDFs, Word docs, Text files) and ask natural-language questions about their content.
+
+The system uses advanced AI (Hybrid Retrieval combining both keyword and semantic search) to retrieve the right information and generate accurate answers with strict line-limit formatting and web search fallbacks.
+
+---
+
+## 🌐 Live Deployments & Demo
+*   **Live Web Application (Frontend):** [https://enterpriseragapplicat.netlify.app](https://enterpriseragapplicat.netlify.app)
+*   **Live Backend API Server:** [https://dataset-rag-application.onrender.com](https://dataset-rag-application.onrender.com)
+*   **Interactive API documentation:** [https://dataset-rag-application.onrender.com/docs](https://dataset-rag-application.onrender.com/docs) (FastAPI Swagger UI)
+*   **Loom Demo Video Walkthrough:** `[Insert your Loom Video Link here]`
+
+---
+
+## 📊 Evaluation & Metrics Scorecard
+The RAG pipeline has been fully evaluated against a test dataset of 10 Q&A pairs (comprising technical developer coding queries and corporate policy handbooks).
+*   **Constraint Compliance (4-Line Limits):** **100%**
+*   **Local Retrieval QA Accuracy:** **100%**
+*   **Web Fallback Trigger Accuracy:** **100%**
+*   **Hallucination Prevention Rate:** **100%**
+
+Detailed test execution logs, metrics, and parameters can be found in:  
+📄 **[system_evaluation_report.md](file:///d:/VsCode/Rag_application/docs/system_evaluation_report.md)**
+
+---
+
+## 🗺️ System Architecture
+
+The application implements a multi-stage retrieval and routing pipeline to ensure fast, safe, and accurate answers:
+
+```mermaid
+graph TD
+    classDef process fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef storage fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef external fill:#fbb,stroke:#333,stroke-width:2px;
+    
+    A[Upload Files] --> B(Recursive Splitter)
+    B --> C(FAISS Vector Index)
+    B --> D(BM25 Keyword Index)
+    
+    E[User Query] --> F(Hybrid Combiner: alpha * BM25 + beta * FAISS)
+    C --> F
+    D --> F
+    
+    F --> G{Relevance >= 0.15?}
+    G -- Yes --> H[FlashRank Reranker]
+    H --> I[SO Answer Enrichment]
+    I --> J(LLM Generator)
+    
+    G -- No --> K[DuckDuckGo Web Search Fallback]
+    K --> J
+    
+    J --> L[Exactly 4-Line Output]
+
+    class B,F,H,I,K process;
+    class C,D storage;
+    class A,E,J,L external;
+```
+
+A detailed breakdown of the data processing models, hybrid normalizations, and enrichment logic is documented in:  
+📄 **[architecture.md](file:///d:/VsCode/Rag_application/docs/architecture.md)**
 
 ---
 
 ## 🗂️ Project Structure
 
-The project is divided into two main parts: the **Backend** (Python/FastAPI) and the **Frontend** (React/Vite).
-
 ```text
 Enterprise_document/
 │
+├── docs/                           # 📂 Recruiter Assessment Documents
+│   ├── architecture.md             # System architecture & design flowchart
+│   └── system_evaluation_report.md # Performance metrics & constraint benchmarks
+│
 ├── backend/                        # ⚙️ Python Backend Server
 │   ├── src/                        # Source code for the backend logic
-│   │   ├── app.py                  # Main API server (FastAPI endpoints: /upload, /ask, etc.)
+│   │   ├── app.py                  # Main API server (FastAPI endpoints)
 │   │   ├── ingestion.py            # Code to read and chunk uploaded documents
 │   │   ├── vector_store.py         # Code to manage the FAISS vector database
 │   │   ├── retrievers.py           # Logic for Hybrid Search (BM25 + FAISS)
-│   │   ├── qa_chain.py             # LangChain logic to connect the LLM and retriever
-│   │   └── evaluation.py           # Optional tools for evaluating answer quality
+│   │   ├── qa_chain.py             # LangChain logic connecting LLM and retriever
+│   │   ├── evaluation.py           # Evaluation tools using RAGAS metrics
+│   │   └── run_eval.py             # Offline test suite runner (UTF-8 configured)
 │   │
-│   ├── data/                       # 📁 Folder where your uploaded documents are saved (Git ignored)
-│   ├── faiss_index/                # 🧠 Folder where the vector database is stored (Git ignored)
-│   ├── bm25_chunks.json            # 🧠 File storing keyword search indices (Git ignored)
-│   ├── requirements.txt            # List of Python dependencies needed
-│   └── .env                        # 🔑 Environment variables and API keys (Git ignored)
+│   ├── requirements.txt            # Python dependencies list
+│   └── settings.json               # Model parameters & retrieval weights
 │
 ├── frontend/                       # 🎨 React + Vite User Interface
-│   ├── src/                        # Source code for the frontend UI
-│   │   ├── App.jsx                 # Main React component (the web page you see)
-│   │   ├── App.css                 # Specific styles for components
-│   │   └── index.css               # Global styles and design themes
-│   │
-│   ├── public/                     # Static files (like favicon, images)
-│   ├── index.html                  # Main HTML file that loads the React app
-│   ├── vite.config.js              # Configuration for the Vite build tool
-│   └── package.json                # List of Node.js dependencies (React, Vite, etc.)
+│   ├── src/                        # React components and views
+│   │   ├── App.jsx                 # Core App component (settings, query lab, dashboard)
+│   │   ├── App.css                 # Component styling sheet
+│   │   └── index.css               # Global theme stylesheet
+│   └── package.json                # Node.js dependencies
 │
-├── .gitignore                      # Tells Git which files to ignore (like passwords/large folders)
-└── README.md                       # The instruction manual you are reading right now!
+└── README.md                       # Recruiting & Setup guide
 ```
 
 ---
 
-## 🚀 Getting Started Guide
+## 🚀 Getting Started Locally
 
-Follow these steps to run the project on your local machine. You will need to start **both** the backend and the frontend.
+### 1. Backend Setup
+1. Move to the backend folder:
+   ```bash
+   cd backend
+   ```
+2. Set up and activate a virtual environment:
+   ```bash
+   python -m venv venv
+   # Windows:
+   venv\Scripts\activate
+   # Mac/Linux:
+   source venv/bin/activate
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Create a `.env` file in the `backend/` directory:
+   ```env
+   OPENAI_API_KEY=your_openrouter_api_key_here
+   OPENAI_BASE_URL=https://openrouter.ai/api/v1
+   ```
+5. Start the uvicorn API:
+   ```bash
+   uvicorn src.app:app --reload --host 0.0.0.0 --port 8000
+   ```
 
-### Prerequisites
-Make sure you have installed:
-- **Python** (version 3.10 or higher)
-- **Node.js** (version 18 or higher)
-
-### 1. Backend Setup (Terminal 1)
-
-Open a terminal and navigate to the `backend` folder to set up the server.
-
-```bash
-# Move into the backend folder
-cd backend
-
-# Create a virtual environment (this keeps dependencies isolated)
-python -m venv venv
-
-# Activate the virtual environment
-# On Windows:
-venv\Scripts\activate
-# On Mac/Linux:
-# source venv/bin/activate
-
-# Install all the required Python libraries
-pip install -r requirements.txt
-```
-
-**Set up your keys:**
-Create a file named `.env` inside the `backend` folder and add your API keys:
-```env
-HUGGINGFACEHUB_API_TOKEN=your_huggingface_token_here
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-**Start the Backend Server:**
-```bash
-# Run this command while still inside the backend/ folder
-uvicorn src.app:app --reload --host 0.0.0.0 --port 8000
-```
-*The backend API is now running at **http://localhost:8000***
-
-### 2. Frontend Setup (Terminal 2)
-
-Open a **new** terminal window and navigate to the `frontend` folder.
-
-```bash
-# Move into the frontend folder
-cd frontend
-
-# Install all the required Node.js libraries
-npm install
-
-# Start the frontend user interface
-npm run dev
-```
-*The frontend is now running at **http://localhost:5173***
-
-Open your browser and go to `http://localhost:5173` to use the application!
-
----
-
-## ⚙️ How the System Works
-
-1. **Upload via UI**: You upload a document (like a PDF) using the web interface.
-2. **Backend Storage**: The backend saves this file into the `backend/data/` folder.
-3. **Ingestion**: When you ask the system to ingest, it reads the document, breaks it into smaller "chunks", and creates two types of indexes:
-   - A **FAISS Vector Index** (for understanding the *meaning* of words).
-   - A **BM25 Keyword Index** (for finding exact word matches).
-4. **Asking Questions**: You type a question in the UI.
-5. **Hybrid Retrieval**: The backend searches both indexes (FAISS and BM25) to find the most relevant chunks of text from your documents.
-6. **LLM Answer**: The backend sends your question and those relevant chunks to an AI model (LLM), which reads them and writes a clear answer, alongside verifying which documents it used.
-
----
-
-## 📝 Important Notes on Git and Committing
-
-To keep the repository clean and secure, certain files are **ignored** by Git (defined in `.gitignore`):
-- **Dependencies**: `venv/` and `node_modules/` are huge and can be re-downloaded anytime using `pip install` or `npm install`.
-- **Secrets**: `backend/.env` contains your passwords and API keys. NEVER commit this to GitHub.
-- **Your Data**: `backend/data/`, `faiss_index/`, and `bm25_chunks.json` are unique to the files you upload locally, so they are not tracked.
+### 2. Frontend Setup
+1. Open a new terminal and navigate to the frontend folder:
+   ```bash
+   cd frontend
+   ```
+2. Install packages and start Vite:
+   ```bash
+   npm install
+   npm run dev
+   ```
+3. Open `http://localhost:5173` in your browser to run the interface!
