@@ -627,9 +627,9 @@ function App() {
                       handleSaveSettings({ model_name: e.target.value });
                     }}
                   >
-                    <option value="openai/gpt-4o">GPT-4o Architect (Recommended)</option>
-                    <option value="anthropic/claude-3-5-sonnet">Claude Enterprise</option>
-                    <option value="meta/llama-3.1-70b-instruct">Llama 4 70B Local</option>
+                    <option value="openrouter/free">Auto-Select Free Engine (Free)</option>
+                    <option value="openai/gpt-4o">GPT-4o Architect (Paid)</option>
+                    <option value="anthropic/claude-3-5-sonnet">Claude Enterprise (Paid)</option>
                   </select>
                 </div>
                 <div className="setting-row">

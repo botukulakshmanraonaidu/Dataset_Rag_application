@@ -69,7 +69,7 @@ SETTINGS_FILE = Path(__file__).resolve().parent.parent / "settings.json"
 
 def load_settings() -> dict:
     default_settings = {
-        "model_name": "openai/gpt-4o",
+        "model_name": "openrouter/free",
         "temperature": 0.0,
         "max_tokens": 300,
         "hybrid_alpha": 0.5,

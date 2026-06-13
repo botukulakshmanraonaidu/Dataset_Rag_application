@@ -4,6 +4,11 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except AttributeError:
+    pass
+
 # ---------- PATH SETUP ----------
 # Ensure 'src' can be found regardless of execution directory
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -31,7 +36,7 @@ def load_settings() -> dict:
     settings_file = BACKEND_DIR / "settings.json"
     if not settings_file.exists():
         return {
-            "model_name": "openai/gpt-4o",
+            "model_name": "openrouter/free",
             "temperature": 0.0,
             "max_tokens": 300,
             "hybrid_alpha": 0.5,
